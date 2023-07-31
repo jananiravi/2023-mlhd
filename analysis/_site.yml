@@ -1,10 +1,12 @@
-name: "New Project"
+name: "2023-MLHD"
 output_dir: ../docs
 navbar:
-  title: "New Project"
+  title: "ML for Microbial Genomics"
   left:
   - text: Home
     href: index.html
+  - text: Intro
+    href: intro.html
   - text: About
     href: about.html
   - text: License

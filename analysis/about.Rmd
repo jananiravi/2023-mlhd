@@ -7,4 +7,5 @@ editor_options:
   chunk_output_type: console
 ---
 
-Describe your project here.
+This is a companion repo & webpage for the Microbial Genomics and ML workshop, first presented at the MLHD 2023 conference!
+You can access the material here: https://github.com/jananiravi/2023-mlhd

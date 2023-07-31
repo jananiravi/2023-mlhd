@@ -1,0 +1,390 @@
+---
+title: "Machine Learning for Microbial Genomics"
+author: "Janani Ravi"
+format:
+  html:
+    toc: true
+    toc-title: Contents
+---
+
+> MLHD @ICTS \| Aug 02, 2023
+>
+> This session will cover ideas, concepts, and insights needed to get started with building machine learning models with high-dimensional data, such as microbial genomics. No prior knowledge in ML is required.
+
+## Install and load packages
+
+To use the code in this document, you will need to install the following packages: `glmnet`, `tidyverse`, and `tidymodels`.
+
+```{r}
+#| echo: true
+#| output: false
+
+library(tidyverse)
+library(tidymodels)
+library(glmnet)
+```
+
+## Read in the data file
+
+Here, we will use microbial genomics data (i.e., gene presence/absence across multiple microbial genomes) wrangled and processed from the [Bv-BRC](https://bv-brc.org/) to predict the antibiotic resistance phenotype of each sample (genome) based on the presence/absence of genes in that sample.
+
+To make the dataset usable on your local desktop machine, we have pre-processed the data (using custom scripts that use NCBI/BV-BRC data and metadata, NCBI and BV-BRC CLI, Prokka for genome annotation, and Roary/CD-HIT for constructing ht gene presence/absence matrix and gene clusters that serve as ML features). For this workshop, we have selected a subset of ~900 genomes from _Staphylococcus aureus_, and limited the data to `n` genes after filtering out core (present in >95% of genomes) and unique (present in <5% of genomes) genes.
+
+The data is contained in the file `gpa-feature-matrix.tsv` with samples (genomes) along the rows and genes along the columns. To get started, let's read this data into R using the `readr::read_delim` function.
+
+```{r}
+#| echo: true
+#| output: false
+
+exp_featmat <- read_delim("gpa-feature-matrix.tsv", delim = "\t")
+```
+
+Let's print the tibble to examine it quickly.
+
+```{r}
+#| echo: true
+#| output: false
+
+exp_featmat
+# dim(exp_featmat)
+```
+
+Then, let's examine the `amr_pheno` column of this data frame that tells us which antimicrobial resistance (AMR) phenotype (resistance/susceptible) for each sample (i.e., each row, genome) for different drugs. We can tabulate the number and fraction of genomes per phenotype easily using the `count` and `mutate` functions from `dplyr`.
+
+```{r}
+#| echo: true
+#| output: false
+
+exp_featmat %>%
+  count(amr_pheno) %>% 
+  mutate(prop = n/sum(n))
+```
+
+Before we proceed, let's also try and get a sense of the gene expression values in this dataset. As there are thousands of genes, we'll randomly pick a few of them and visualize the distribution of their values across all the samples using boxplots.
+
+```{r}
+#| echo: true
+#| output: false
+
+rand_cols <- sample(2:ncol(exp_featmat), 50)
+boxplot(exp_featmat[,rand_cols])
+```
+
+## Set up the feature matrix and labels for the ML model
+
+Given there are genomes with R/S from multiple drugs, to make the problem simpler, let's pick one drug of interest and define the problem as classifying whether a genome is resistant or not to this antibiotic.
+
+```{r}
+#| echo: true
+#| output: false
+
+pos_pheno <- "Resistant"
+```
+
+Then, we need to modify the `amr_pheno` variable into a binary indicator of whether it is resistant or not and finally convert that variable into a factor so that the model knows to consider it as a way to partition the samples.
+
+```{r}
+#| echo: true
+#| output: false
+
+exp_featmat_pheno <-
+  exp_featmat %>%
+  mutate(amr_pheno = ifelse(amr_pheno==pos_pheno, "Resistant", "Susceptible")) %>%
+  mutate(across(where(is.character), as.factor))
+```
+
+A critical quantity to be fully aware of when setting up an ML problem is class balance, i.e., the relative sizes of the positive (`"Resistant"`) and negative (`"Susceptible"`) classes.
+
+```{r}
+#| echo: true
+#| output: false
+
+exp_featmat_pheno %>% 
+  count(amr_pheno) %>% 
+  mutate(prop = n/sum(n))
+```
+
+We can see that, in our dataset, only xx% of the samples are "Resistant". Referred to as *class imbalance*, this scenario is extremely common in biomedicine and needs careful attention when analyzing and interpreting results.
+
+## Data splitting
+
+If we take the data from all samples and train an *AMR classification* ML model, we cannot easily tell how good the model is. So, let's reserve 25% of the samples to a *test set*, which we will hold out until the end of the project, at which point there should only be one or two models under serious consideration. The *test set* will be used as an unbiased source for measuring final model performance.
+
+This is also the first step where we need to pay attention to class imbalance. As the `amr_pheno` variable is highly imbalanced, we need to use *stratified* random samples so that both the splits contain nearly identical proportions of positive and negative samples.
+
+```{r}
+#| echo: true
+#| output: false
+
+# The function `initial_split()` takes the original data and saves the information on how to make the partitions.
+set.seed(123)
+splits <- initial_split(exp_featmat_pheno, strata = amr_pheno)
+
+# The `training()` and `testing()` functions return the actual datasets.
+exp_other <- training(splits)
+exp_test  <- testing(splits)
+```
+
+Let's check if we indeed did achieve stratified data splits.
+
+```{r}
+#| echo: true
+#| output: false
+
+# other set proportions by AMR pheno
+exp_other %>% 
+  count(amr_pheno) %>% 
+  mutate(prop = n/sum(n))
+```
+
+```{r}
+#| echo: true
+#| output: false
+
+# test set proportions by R/S ratio
+exp_test %>%
+  count(amr_pheno) %>% 
+  mutate(prop = n/sum(n))
+```
+
+What's up with the `exp_other` split that's not testing? This split will be used to create two new datasets:
+
+1.  The set held out for the purpose of measuring performance, called the *validation set*, and
+2.  The remaining data used to fit the model, called the *training set*.
+
+We'll use the `validation_split` function to allocate 20% of the `exp_other` samples to the validation set and the remaining 80% to the training set. Note that this function too has the `strata` argument. Do you see why we need it here?
+
+```{r}
+#| echo: true
+#| output: false
+
+set.seed(234)
+val_set <- validation_split(exp_other,
+                            strata = amr_pheno, 
+                            prop = 0.80)
+val_set
+```
+
+## Training my first ML model: Penalized logistic regression
+
+Since our outcome variable `AMR_pheno` is categorical, [logistic regression](https://en.wikipedia.org/wiki/Logistic_regression) would be a good first model to start. Let's use a model that can perform feature selection during training. The [glmnet](https://cran.r-project.org/web/packages/glmnet/index.html) R package fits a generalized linear model via penalized maximum likelihood. This method of estimating the logistic regression slope parameters uses a *penalty* on the process so that the coefficients of less relevant predictors are driven towards a value of zero. One of the `glmnet` penalization methods, called the [lasso method](https://en.wikipedia.org/wiki/Lasso_(statistics)), can actually set the predictor slopes to zero if a large enough penalty is used.
+
+### Build the model
+
+To specify a penalized logistic regression model that uses a feature selection penalty, we will use `parsnip` package (part of `tidymodels`) that is great at providing a tidy, unified interface to models that can be used to try a range of models without getting bogged down in the syntactical minutiae of the underlying packages.
+
+Here, let's use it with the [glmnet engine](https://www.tidymodels.org/find/parsnip/):
+
+```{r}
+#| echo: true
+#| output: false
+
+lr_mod <- 
+  logistic_reg(penalty = tune(), mixture = 1) %>% 
+  set_engine("glmnet")
+```
+
+We'll set the `penalty` argument to `tune()` as a placeholder for now. This is a model *hyperparameter* that we will [tune](https://www.tidymodels.org/start/tuning/) to find the best value for making predictions with our data. Setting `mixture` to a value of one means that the glmnet model will potentially remove irrelevant predictors and choose a simpler model.
+
+### Create the recipe
+
+Next, we're going to use the `recipes` to build [dplyr](https://dplyr.tidyverse.org/)-like pipeable sequences of feature engineering steps to get our data ready for modeling. Recipes are built as a series of pre-processing steps, such as:
+
+-   converting qualitative predictors to indicator variables (also known as dummy variables),
+
+-   transforming data to be on a different scale (e.g., taking the logarithm of a variable),
+
+-   transforming whole groups of predictors together,
+
+-   extracting key features from raw variables (e.g., getting the day of the week out of a date variable),
+
+and so on. Here, we're using it to set up the outcome variable as a function of gene presence and then do two things:
+
+-   `step_zv()` removes indicator variables that only contain a single unique value (e.g. all zeros). This is important because, for penalized models, the predictors should be centered and scaled.
+
+-   `step_normalize()` centers and scales numeric variables.
+
+```{r}
+#| echo: true
+#| output: false
+
+lr_recipe <- 
+  recipe(amr_pheno ~ ., data = exp_other) %>% 
+  step_zv(all_predictors()) %>% 
+  step_normalize(all_predictors())
+```
+
+### Create the workflow
+
+Let's bundle the model and recipe into a single `workflow()` object to make management of the R objects easier:
+
+```{r}
+#| echo: true
+#| output: false
+
+lr_workflow <- 
+  workflow() %>% 
+  add_model(lr_mod) %>% 
+  add_recipe(lr_recipe)
+```
+
+### Create the grid for tuning
+
+Before we fit this model, we need to set up a grid of `penalty` values to tune.
+
+```{r}
+#| echo: true
+#| output: false
+
+lr_reg_grid <- tibble(penalty = 10^seq(-4, -1, length.out = 10))
+lr_reg_grid
+```
+
+### Train and tune the model
+
+The `tune::tune_grid()` function will help us train these 10 penalized logistic regression models and save the validation set prediction (via the call to `control_grid()`) so that diagnostic information will be available after fitting the model. To quantify how well the model performs (on the *validation set*), let's first consider the [area under the ROC curve](https://en.wikipedia.org/wiki/Receiver_operating_characteristic) across a range of prediction score thresholds.
+
+```{r}
+#| echo: true
+#| output: false
+
+lr_res <- 
+  lr_workflow %>% 
+  tune_grid(val_set,
+            grid = lr_reg_grid,
+            control = control_grid(save_pred = TRUE),
+            metrics = metric_set(roc_auc))
+```
+
+A plot of the area under the ROC curve against the range of penalty values will help us guess which value is best for the problem/dataset at hand.
+
+```{r}
+#| echo: true
+#| output: false
+
+lr_plot <- 
+  lr_res %>% 
+  collect_metrics() %>% 
+  ggplot(aes(x = penalty, y = mean)) + 
+  geom_point() + 
+  geom_line() + 
+  ylab("Area under the ROC Curve") +
+  #ylab("Area under the PR Curve") +
+  scale_x_log10(labels = scales::label_number()) +
+  theme_bw()
+
+lr_plot
+```
+
+What is your interpretation of this plot? Write it here.
+
+We can also tabulate these results to help pick the "best" hyperparameter.
+
+```{r}
+#| echo: true
+#| output: false
+
+top_models <-
+  lr_res %>% 
+  show_best("roc_auc", n = 10) %>% 
+  arrange(penalty) 
+top_models
+```
+
+Let's select the best value and visualize the validation set ROC curve. Why are we picking the 6^th^ value instead of the 1^st^ even though they have nearly identical performance metrics?
+
+```{r}
+#| echo: true
+#| output: false
+
+lr_best <- 
+  lr_res %>% 
+  collect_metrics() %>% 
+  arrange(penalty) %>% 
+  slice(6)
+lr_best
+```
+
+```{r}
+#| echo: true
+#| output: false
+
+lr_roc <- 
+  lr_res %>% 
+  collect_predictions(parameters = lr_best) %>% 
+  roc_curve(amr_pheno, .pred_Correct) %>% 
+  mutate(model = "Logistic Regression")
+
+autoplot(lr_roc)
+```
+
+The area under the ROC curve has a nice property that it can be interpreted as a probability and has a close connection to a statistical test ([the Mann-Whitney U test](https://en.wikipedia.org/wiki/Mann%E2%80%93Whitney_U)).
+
+However, this measure is not sensitive to class imbalances and can come out to be high even if the model is making many mistakes in the minor positive class --- which is typically of biomedical interest --- and getting most of the major negative class correct.
+
+So, the final analysis we're going to do is to evaluate performance based on another metric called [area under the Precision-Recall curve](https://en.wikipedia.org/wiki/Precision_and_recall) that is more sensitive to the minor positive class by focusing on the fraction of top positive predictions that are correct (precision) and the fraction of positive samples that are correctly predicted (recall).
+
+```{r}
+#| echo: true
+#| output: false
+
+lr_res <- 
+  lr_workflow %>% 
+  tune_grid(val_set,
+            grid = lr_reg_grid,
+            control = control_grid(save_pred = TRUE),
+            metrics = metric_set(pr_auc))
+```
+
+```{r}
+#| echo: true
+#| output: false
+
+lr_plot <- 
+  lr_res %>% 
+  collect_metrics() %>% 
+  ggplot(aes(x = penalty, y = mean)) + 
+  geom_point() + 
+  geom_line() + 
+  ylab("Area under the PR Curve") +
+  scale_x_log10(labels = scales::label_number()) +
+  theme_bw()
+
+lr_plot
+```
+
+```{r}
+#| echo: true
+#| output: false
+
+lr_best <- 
+  lr_res %>% 
+  collect_metrics() %>% 
+  arrange(penalty) %>% 
+  slice(6)
+lr_best
+```
+
+```{r}
+#| echo: true
+#| output: false
+
+lr_pr <- 
+  lr_res %>% 
+  collect_predictions(parameters = lr_best) %>% 
+  pr_curve(amr_pheno, .pred_Correct) %>% 
+  mutate(model = "Logistic Regression")
+
+autoplot(lr_pr)
+```
+
+# Conclusions
+
+## Other variations to try
+### Focusing on the most important features w/ L1
+
+### Dimensionality reduction with SVD
+
+Interpreting your top PCs from SVD.
+
+## How to contact us
