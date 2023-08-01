@@ -9,5 +9,5 @@ Before the workshop, please ensure the following are set-up
 
 ## How to reach me
 - [Email](mailto:janani.ravi@cuanschutz.edu)
-- Website: <https//jravilab.github.io>
+- Website: <https://jravilab.github.io>
 - Twitter: [@jravilab](//twitter.com/jravilab) | [@janani137](//twitter.com/janani137)
