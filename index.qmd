@@ -16,14 +16,14 @@ output:
 
 ## Overview
 
-> This session will cover ideas, concepts, and insights needed to get started with building machine learning models with high-dimensional data, such as microbial genomics. No prior knowledge in ML is required.
+> This session will cover ideas, concepts, and insights needed to get started with building machine learning models in R with high-dimensional data, such as microbial genomics. No prior knowledge in ML is required.
 
 ### Acknowledgments
 
--   JRaviLab: Jacob Krol, Ethan Wolfe, Evan Brenner, Keenan Manpearl, Joseph Burke, Vignesh Sridhar, Jill Bilodeaux
--   Arjun Krishnan
--   R-Ladies, esp. R-Ladies East Lansing, R-Ladies Aurora
--   `tidymodels` resource by Julia Silge et al., \| tidymodels.org
+-   JRaviLab: Jacob Krol, Ethan Wolfe, Evan Brenner, Keenan Manpearl, Joseph Burke, Vignesh Sridhar, Jill Bilodeaux (contributed to the antimicrobial resistance project)
+-   Arjun Krishnan (contributed to the tidymodels qmd primer)
+-   R-Ladies, esp. R-Ladies East Lansing, R-Ladies Aurora; R/Bioconductor; rOpenSci (for all things R!)
+-   `tidymodels` resource by Julia Silge et al., \| <https://tidymodels.org>
 
 ## Install and load packages
 
@@ -35,7 +35,9 @@ To use the code in this document, you will need to install the following package
 
 library(tidyverse)
 library(tidymodels)
-library(glmnet)
+library(glmnet) # for LR
+library(vip) # to extract important features
+library(ranger) # for RF
 ```
 
 ## Explore your data
@@ -53,7 +55,7 @@ The data is contained in the files `abc.csv` with samples (genomes) along the ro
 #| output: true
 # Can be set to read csv/tsv: any feature matrix file with metadata
 # e.g., gpa-feature-matrix.tsv
-exp_featmat <- read_delim("data/staph_penicillin_pangenome.csv",
+gpa_featmat <- read_delim("data/staph_penicillin_pangenome.csv",
                           delim = ",", col_names = T)
 ```
 
@@ -65,8 +67,8 @@ Let's print the tibble to examine it quickly.
 #| echo: true
 #| output: true
 
-exp_featmat
-dim(exp_featmat)
+gpa_featmat
+dim(gpa_featmat)
 ```
 
 Then, let's examine the `amr_pheno` column of this data frame that tells us which antimicrobial resistance (AMR) phenotype (resistance/susceptible) for each sample (i.e., each row, genome) for different drugs. We can tabulate the number and fraction of genomes per phenotype easily using the `count` and `mutate` functions from `dplyr`.
@@ -75,7 +77,7 @@ Then, let's examine the `amr_pheno` column of this data frame that tells us whic
 #| echo: true
 #| output: true
 
-exp_featmat %>%
+gpa_featmat %>%
   count(amr_pheno) %>% 
   mutate(prop = n/sum(n))
 ```
@@ -86,16 +88,21 @@ Before we proceed, let's also try and get a sense of the values in this feature 
 #| echo: true
 #| output: true
 
-exp_sub <- exp_featmat |>
+gpa_sum <- gpa_featmat |>
   select(7:last_col()) |>
   summarize(across(where(is.numeric), sum))
 
-hist(as.numeric(exp_sub),
-     xlab = "No. of genomes carrying the gene",
-     ylab = "No. of genes with the indicated Frequency",
-     main = "Histogram of gene presence distribution")
+gpa_sum_long <- gpa_sum |> 
+  pivot_longer(cols = everything(), names_to = "gene")
 
-boxplot(exp_sub[,7:ncol(exp_sub)])
+
+ggplot(gpa_sum_long, aes(value)) +
+  # geom_histogram(bins=10) +
+  geom_bar() +
+  scale_x_binned() +
+  theme_minimal() +
+  xlab("Genes present in X genomes") +
+  ylab("N Genes with X frequency")
 
 ```
 
@@ -118,8 +125,8 @@ Then, we need to modify the `amr_pheno` variable into a binary indicator of whet
 #| echo: true
 #| output: true
 
-exp_featmat_pheno <-
-  exp_featmat %>%
+gpa_featmat_pheno <-
+  gpa_featmat %>%
   mutate(amr_pheno = ifelse(amr_pheno==pos_pheno,
                             "Resistant", "Susceptible")) %>%
   mutate(across(where(is.character), as.factor))
@@ -131,7 +138,7 @@ A critical quantity to be fully aware of when setting up an ML problem is class 
 #| echo: true
 #| output: true
 
-exp_featmat_pheno %>% 
+gpa_featmat_pheno %>% 
   count(amr_pheno) %>% 
   mutate(prop = n/sum(n))
 ```
@@ -150,11 +157,14 @@ This is also the first step where we need to pay attention to class imbalance. A
 
 # The function `initial_split()` takes the original data and saves the information on how to make the partitions.
 set.seed(123)
-splits <- initial_split(exp_featmat_pheno, strata = amr_pheno)
+splits <- initial_split(data = gpa_featmat_pheno,
+                        strata = amr_pheno)
+# Within initial_split, you can specify proportion using "prop" and
+# grouping/datasets to go into the same set using "group"
 
 # The `training()` and `testing()` functions return the actual datasets.
-exp_other <- training(splits)
-exp_test  <- testing(splits)
+gpa_other <- training(splits)
+gpa_test  <- testing(splits)
 ```
 
 Let's check if we indeed did achieve stratified data splits.
@@ -164,7 +174,7 @@ Let's check if we indeed did achieve stratified data splits.
 #| output: true
 
 # other set proportions by AMR pheno
-exp_other %>% 
+gpa_other %>%
   count(amr_pheno) %>% 
   mutate(prop = n/sum(n))
 ```
@@ -174,30 +184,30 @@ exp_other %>%
 #| output: true
 
 # test set proportions by R/S ratio
-exp_test %>%
+gpa_test %>%
   count(amr_pheno) %>% 
   mutate(prop = n/sum(n))
 ```
 
-What's up with the `exp_other` split that's not testing? This split will be used to create two new datasets:
+What's up with the `gpa_other` split that's not testing? This split will be used to create two new datasets:
 
 1.  The set held out for the purpose of measuring performance, called the *validation set*, and
 2.  The remaining data used to fit the model, called the *training set*.
 
-We'll use the `validation_split` function to allocate 20% of the `exp_other` samples to the validation set and the remaining 80% to the training set. Note that this function too has the `strata` argument. Do you see why we need it here?
+We'll use the `validation_split` function to allocate 20% of the `gpa_other` samples to the validation set and the remaining 80% to the training set. Note that this function too has the `strata` argument. Do you see why we need it here?
 
 ```{r echo=TRUE, eval=TRUE, message=FALSE, warning=FALSE}
 #| echo: true
 #| output: true
 
 set.seed(234)
-val_set <- validation_split(exp_other,
-                            strata = amr_pheno, 
-                            prop = 0.80)
-val_set
+gpa_val <- validation_split(data = gpa_other,
+                            strata = amr_pheno, # maintain original data split
+                            prop = 0.80) # 80% training; 20% validation
+gpa_val
 ```
 
-### Training my first ML model: Penalized logistic regression
+### Training ML models in R: Penalized logistic regression
 
 Since our outcome variable `AMR_pheno` is categorical, [logistic regression](https://en.wikipedia.org/wiki/Logistic_regression) would be a good first model to start. Let's use a model that can perform feature selection during training. The [glmnet](https://cran.r-project.org/web/packages/glmnet/index.html) R package fits a generalized linear model via penalized maximum likelihood. This method of estimating the logistic regression slope parameters uses a *penalty* on the process so that the coefficients of less relevant predictors are driven towards a value of zero. One of the `glmnet` penalization methods, called the [lasso method](https://en.wikipedia.org/wiki/Lasso_(statistics)), can actually set the predictor slopes to zero if a large enough penalty is used.
 
@@ -211,12 +221,16 @@ Here, let's use it with the [glmnet engine](https://www.tidymodels.org/find/pars
 #| echo: true
 #| output: true
 
-lr_mod <- 
-  logistic_reg(penalty = tune(), mixture = 1) %>% 
+# Build logistic regression model
+lr_model <- 
+  logistic_reg(penalty = tune(), # strength of regularization/penalty
+               mixture = 1) %>% # specifies a pure lasso model
   set_engine("glmnet") # set to generalized linear models
 ```
 
-We'll set the `penalty` argument to `tune()` as a placeholder for now. This is a model *hyperparameter* that we will [tune](https://www.tidymodels.org/start/tuning/) to find the best value for making predictions with our data. Setting `mixture` to a value of one means that the glmnet model will potentially remove irrelevant predictors and choose a simpler model.
+We'll set the `penalty` argument to `tune()` as a placeholder for now. This is a model *hyperparameter* that we will [tune](https://www.tidymodels.org/start/tuning/) to find the best value for making predictions with our data. Setting `mixture` to a value of `1` means that the glmnet model will potentially remove irrelevant predictors and choose a simpler model. Sum of absolute values of beta-coefficients is minimized.
+
+*You can try with `mixture=0` for L2 ridge regression (or 0-1 for elasticnet combining L1 and L2).*
 
 ### Create the recipe
 
@@ -241,12 +255,16 @@ and so on. Here, we're using it to set up the outcome variable as a function of 
 #| output: true
 
 lr_recipe <- 
-  recipe(amr_pheno ~ ., data = exp_other) %>% # specify data + labels
-  update_role(c(s_no, genome_id, antibiotic, drug_class, assembly_accession),
+  recipe(amr_pheno ~ ., data = gpa_other) %>% # specify data + labels
+  update_role(c(s_no, genome_id, assembly_accession, # genome attributes
+                antibiotic, drug_class), # drug attributes
               new_role = "Supplementary") %>% # tag metadata not used for ML
   step_zv(all_predictors()) %>% # remove predictors with only one value
+  # step_nzv(all_predictors()) # for near-zero variance
   step_normalize(all_predictors()) # normalize all predictors
 ```
+
+*Try with `step_nzv` instead of only `step_zv`.*
 
 ### Create the workflow
 
@@ -256,9 +274,9 @@ Let's bundle the model and recipe into a single `workflow()` object to make mana
 #| echo: true
 #| output: true
 
-lr_workflow <- 
-  workflow() %>% 
-  add_model(lr_mod) %>% 
+# Standard model recipe for LR | uses our recipe definition from above
+lr_workflow <- workflow() %>% 
+  add_model(lr_model) %>%
   add_recipe(lr_recipe)
 ```
 
@@ -270,6 +288,8 @@ Before we fit this model, we need to set up a grid of `penalty` values to tune.
 #| echo: true
 #| output: true
 
+# Try values from 0.0001 to 0.1 to penalize for complex models;
+# Minimizing no. of features with non-zero coefficients
 lr_reg_grid <- tibble(penalty = 10^seq(-4, -1, length.out = 10))
 lr_reg_grid
 ```
@@ -284,24 +304,25 @@ The `tune::tune_grid()` function will help us train these 10 penalized logistic 
 
 lr_res <- 
   lr_workflow %>% 
-  tune_grid(val_set,
+  tune_grid(resamples = gpa_val, # using validation split
             grid = lr_reg_grid,
             control = control_grid(save_pred = TRUE),
             metrics = metric_set(roc_auc))
+#metrics = metric_set(pr_auc)) # if you want to optimize for AUPRC instead
 ```
 
-### Want to add cross-validation
+#### Tune the model with cross-validation instead?
 
 ```{r echo=TRUE, eval=FALSE, message=FALSE, warning=FALSE}
 #| echo: true
 #| output: false
 lr_res_cv <- 
   lr_workflow %>% 
-  tune_grid(val_set,
+  tune_grid(resamples = vfold_cv(gpa_other), # new CV line
             grid = lr_reg_grid,
             control = control_grid(save_pred = TRUE),
-            resamples = vfold_cv(exp_other), # new CV line
             metrics = metric_set(roc_auc))
+#metrics = metric_set(pr_auc)) # if you want to optimize for AUPRC instead
 
 ```
 
@@ -313,8 +334,7 @@ A plot of the area under the ROC curve against the range of penalty values will 
 #| echo: true
 #| output: true
 
-lr_plot <- 
-  lr_res %>% 
+lr_plot <- lr_res %>% 
   collect_metrics() %>% 
   ggplot(aes(x = penalty, y = mean)) + 
   geom_point() + 
@@ -348,11 +368,14 @@ Let's select the best value and visualize the validation set ROC curve. Why are 
 #| echo: true
 #| output: true
 
-lr_best <- 
-  lr_res %>% 
+lr_best <- lr_res %>% 
   collect_metrics() %>% 
-  arrange(penalty) %>% 
+  arrange(penalty, mean) %>% 
   slice(6)
+
+# Alternatively, you can just use
+lr_best <- lr_res |> 
+  select_best(metric = "roc_auc")
 lr_best
 ```
 
@@ -360,16 +383,41 @@ lr_best
 #| echo: true
 #| output: true
 
-lr_roc <- 
-  lr_res %>% 
+lr_roc <- lr_res %>% 
   collect_predictions(parameters = lr_best) %>% 
   roc_curve(amr_pheno, .pred_Resistant) %>% 
   mutate(model = "Logistic Regression")
 
 autoplot(lr_roc)
+
+## Alternatively ... 
+# Select the best LR model
+final_lr_model <- finalize_workflow(lr_workflow, lr_best)
+# Fit the data
+lr_fit <- final_lr_model %>% fit(data = gpa_other)
+# Save predictions
+lr_aug <- augment(lr_fit, gpa_test)
+# Calculate AUROC
+auroc <- lr_aug %>% roc_auc(truth = amr_pheno, .pred_Resistant) %>%
+      select(.estimate) %>% as.numeric()
+print(paste("AUROC:", auroc))
 ```
 
 The area under the ROC curve has a nice property that it can be interpreted as a probability and has a close connection to a statistical test ([the Mann-Whitney U test](https://en.wikipedia.org/wiki/Mann%E2%80%93Whitney_U)).
+
+### Selecting the top features
+
+```{r echo=TRUE, eval=TRUE, message=FALSE, warning=FALSE}
+#| echo: true
+#| output: true
+         
+# Extract top 10 genes
+n_top_genes <- 10
+top_genes <- lr_fit %>% extract_fit_parsnip() %>%
+  vip::vi() %>% slice(1:n_top_genes) %>%
+  select(1) %>% pull()
+print(top_genes)
+```
 
 ### When you have imbalanced classes
 
@@ -381,9 +429,8 @@ So, the final analysis we're going to do is to evaluate performance based on ano
 #| echo: true
 #| output: true
 
-lr_res <- 
-  lr_workflow %>% 
-  tune_grid(val_set,
+lr_res_pr <- lr_workflow %>% 
+  tune_grid(resamples = gpa_val,
             grid = lr_reg_grid,
             control = control_grid(save_pred = TRUE),
             metrics = metric_set(pr_auc))
@@ -393,8 +440,7 @@ lr_res <-
 #| echo: true
 #| output: true
 
-lr_plot <- 
-  lr_res %>% 
+lr_plot_pr <- lr_res_pr %>% 
   collect_metrics() %>% 
   ggplot(aes(x = penalty, y = mean)) + 
   geom_point() + 
@@ -410,11 +456,14 @@ lr_plot
 #| echo: true
 #| output: true
 
-lr_best <- 
-  lr_res %>% 
+lr_best_pr <- lr_res_pr %>% 
   collect_metrics() %>% 
   arrange(penalty) %>% 
   slice(6)
+
+# Alternatively, you can just use
+lr_best_pr <- lr_res_pr |> 
+  select_best(metric = "pr_auc")
 lr_best
 ```
 
@@ -422,8 +471,7 @@ lr_best
 #| echo: true
 #| output: true
 
-lr_pr <- 
-  lr_res %>% 
+lr_pr <- lr_res_pr %>% 
   collect_predictions(parameters = lr_best) %>% 
   pr_curve(amr_pheno, .pred_Resistant) %>% 
   mutate(model = "Logistic Regression")
@@ -431,47 +479,163 @@ lr_pr <-
 autoplot(lr_pr)
 ```
 
-### Retrieving your top features
+#### Retrieving your top features
 
-```{r echo=TRUE, eval=FALSE, message=FALSE, warning=FALSE, render=FALSE}
+```{r echo=TRUE, eval=TRUE, message=FALSE, warning=FALSE, render=FALSE}
 #| echo: true
-#| output: false
+#| output: true
 
 #Select best LR model
-    best_lr_model <- select_best(lr_res, "pr_auc")
-    final_lr_model <- finalize_workflow(lr_workflow, best_lr_model)
+best_lr_model_pr <- select_best(lr_res_pr, "pr_auc")
+final_lr_model_pr <- finalize_workflow(lr_workflow, best_lr_model_pr)
 
-    #Fit the data
-    lr_fit <- final_lr_model %>%
-      fit(data = exp_other)
+#Fit the data
+lr_fit_pr <- final_lr_model_pr %>%
+  fit(data = gpa_other)
 
-    #Save predictions
-    lr_aug <- augment(lr_fit, exp_test)
+#Save predictions
+lr_aug_pr <- augment(lr_fit_pr, gpa_test)
 
-    #Get auroc
-    auprc <- lr_aug %>%
-      pr_auc(truth = amr_pheno, .pred_Resistant) %>%
-      select(.estimate) %>% as.numeric()
-    auprc_vec[i] <- auprc; print(paste("AUPRC:", auprc))
-    
-best_lr_model |> 
+#Get auroc
+auprc <- lr_aug_pr %>%
+  pr_auc(truth = amr_pheno, .pred_Resistant) %>%
+  select(.estimate) %>% as.numeric()
+print(paste("AUPRC:", auprc))
+
+## Extract top 10 genes
+n_top_genes <- 10
+
+top_genes_pr <- lr_fit_pr |> 
  extract_fit_parsnip() |>
- vi() |>
+ vip::vi() |>
  slice(1:n_top_genes) |>
  select(1) |>
  pull()
-    top_genes_vec[(n_top_genes * i - (n_top_genes - 1)):(n_top_genes * i)] <- top_genes;
+print(top_genes_pr)
+```
+
+## Predicting AR w/ Random Forest
+
+```{r echo=TRUE, eval=TRUE, message=FALSE, warning=FALSE, render=FALSE}
+#| echo: true
+#| output: true
+# Setting a seed enables our analysis to be reproducible when random numbers are used.
+    set.seed(569)
+
+    rf_splits <- initial_split(gpa_featmat_pheno,
+                                #prop = train_test_split,
+                                strata = amr_pheno)
+
+    #Create separate data frames for the training and testing sets.
+    gpa_train <- training(rf_splits)
+    gpa_test <- testing(rf_splits)
+    
+    set.seed(234)
+    gpa_val <- validation_split(data = gpa_train,
+                                strata = amr_pheno, # maintain original data split
+                                prop = 0.80) # 80% training; 20% validation
+    gpa_val
+    
+    #Create recipe
+    rf_recipe <- recipe(amr_pheno ~ ., data = gpa_train) %>%
+      # To keep these columns but not use them as predictors or outcome
+      update_role(c(s_no, genome_id, assembly_accession, # genome attributes
+                    antibiotic, drug_class), # drug attributes
+                  new_role = "Supplementary") %>%
+      step_zv(all_predictors()) %>% # remove predictors with only one value
+      # step_nzv(all_predictors()) # for near-zero variance
+      step_normalize(all_predictors()) # normalize all predictors
+
+    # Build random forest model
+    num_trees <- 1000
+    rf_model <- rand_forest(trees = num_trees) %>%
+      set_engine("ranger", importance = "impurity") %>%
+      set_mode("classification")
+
+    # Create workflow
+    rf_workflow <- workflow() %>%
+      add_model(rf_model) %>%
+      add_recipe(rf_recipe)
+
+    # Specify the hyperparameter tuning grid
+    rf_grid <- tibble(mtry = c(0.002, 0.02, 0.2), min_n = c(2, 6, 12))
+
+    # Tune the model using cross-validation;
+    # try 30 different hyperparameter sets; use auprc as evaluation metric.
+    rf_res <- tune_grid(rf_workflow,
+                        resamples = vfold_cv(gpa_train),
+                        grid = rf_grid,
+                        control = control_grid(save_pred = T),
+                        metrics = metric_set(roc_auc))
+    
+    rf_best <- rf_res |> 
+      select_best(metric = "roc_auc")
+    
+    # Plot AUROC
+    rf_roc <- rf_res %>% 
+      collect_predictions(parameters = rf_best) %>% 
+      roc_curve(amr_pheno, .pred_Resistant) %>% 
+      mutate(model = "Logistic Regression")
+    autoplot(lr_roc)
+    
+    # Select best RF model
+    best_rf_model <- select_best(rf_res, "roc_auc")
+    final_rf_model <- finalize_workflow(rf_workflow, best_rf_model)
+
+    # Fit the data
+    rf_fit <- final_rf_model %>% fit(data = gpa_train)
+
+    # Save predictions
+    rf_aug <- augment(rf_fit, gpa_test)
+
+    # Get auprc
+    auroc <- rf_aug %>%
+      roc_auc(truth = amr_pheno, .pred_Resistant) %>%
+      select(.estimate) %>%
+      as.numeric()
+    print(paste("AUROC:", auroc))
+
+    # Extract top 10 genes
+    n_top_genes <- 10
+    top_genes_rf <- rf_fit %>%
+      extract_fit_parsnip() %>%
+      vip::vi() %>% slice(1:n_top_genes) %>%
+      select(1) %>% pull()
     print(top_genes)
 ```
 
 ## Too many features?
 
-### Focusing on the most important features w/ L1
+Try dimensionality reduction with SVD --\> retrieve top PCs --\> find contributing features to the top PCs.
 
-### Dimensionality reduction with SVD
+## Recap & Conclusions
 
-Interpreting your top PCs from SVD.
+-   [x] Reproducible docs & code with `qmd`/`rmd`
 
-## Conclusions
+-   [x] basic data cleanup to get it ready for ML models
+
+-   [x] tidymodels
+
+-   [x] building recipes and workflows
+
+-   [x] calculating AUROC and AUPRC
+
+-   [x] train-validate-test splits to optimize for best hyperparameters
+
+-   [x] picking the best models based on low penalty and high AUROC/AUPRC
+
+-   [x] plotting AUROC/AUPRC
+
+-   [x] Logistic regression with L1 lasso regression (and L2)
+
+-   [x] Random Forest models
 
 ## How to contact us
+
+-   Website: <https://jravilab.github.io>
+
+-   Twitter: \@jravilab \@janani137
+
+-   Email: janani DOT ravi AT cuanschutz DOT edu
+
+-   Rendered material: <https://jananiravi.github.io/2023-mlhd>
