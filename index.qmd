@@ -296,7 +296,7 @@ lr_reg_grid
 
 ### Train and tune the model
 
-The `tune::tune_grid()` function will help us train these 10 penalized logistic regression models and save the validation set prediction (via the call to `control_grid()`) so that diagnostic information will be available after fitting the model. To quantify how well the model performs (on the *validation set*), let's first consider the [area under the ROC curve](https://en.wikipedia.org/wiki/Receiver_operating_characteristic) across a range of prediction score thresholds.
+The `tune::tune_grid()` function will help us train these 10 penalized logistic regression models and save the validation set prediction (via the call to `control_grid()`) so that diagnostic information will be available after fitting the model. To quantify how well the model performs (on the *validation set*), let's first consider the [area under the ROC curve](https://en.wikipedia.org/wiki/Receiver_operating_characteristic) across a range of hyperparameters.
 
 ```{r echo=TRUE, eval=TRUE, message=FALSE, warning=FALSE}
 #| echo: true
@@ -485,18 +485,18 @@ autoplot(lr_pr)
 #| echo: true
 #| output: true
 
-#Select best LR model
+# Select best LR model
 best_lr_model_pr <- select_best(lr_res_pr, "pr_auc")
 final_lr_model_pr <- finalize_workflow(lr_workflow, best_lr_model_pr)
 
-#Fit the data
+# Fit the data
 lr_fit_pr <- final_lr_model_pr %>%
   fit(data = gpa_other)
 
-#Save predictions
+# Save predictions
 lr_aug_pr <- augment(lr_fit_pr, gpa_test)
 
-#Get auroc
+# Get AUPRC
 auprc <- lr_aug_pr %>%
   pr_auc(truth = amr_pheno, .pred_Resistant) %>%
   select(.estimate) %>% as.numeric()

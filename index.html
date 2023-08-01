@@ -190,7 +190,7 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 ✖ dplyr::lag()      masks stats::lag()
 ✖ yardstick::spec() masks readr::spec()
 ✖ recipes::step()   masks stats::step()
-• Use tidymodels_prefer() to resolve common conflicts.</code></pre>
+• Use suppressPackageStartupMessages() to eliminate package startup messages</code></pre>
 </div>
 <div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(glmnet) <span class="co"># for LR</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stderr">
@@ -484,7 +484,7 @@ dbl (2324): s_no, genome_id, prmA, hisC_1, araB, yqeN, tagH_2, tet(38), lrgB...
 </section>
 <section id="train-and-tune-the-model" class="level3">
 <h3 class="anchored" data-anchor-id="train-and-tune-the-model">Train and tune the model</h3>
-<p>The <code>tune::tune_grid()</code> function will help us train these 10 penalized logistic regression models and save the validation set prediction (via the call to <code>control_grid()</code>) so that diagnostic information will be available after fitting the model. To quantify how well the model performs (on the <em>validation set</em>), let’s first consider the <a href="https://en.wikipedia.org/wiki/Receiver_operating_characteristic">area under the ROC curve</a> across a range of prediction score thresholds.</p>
+<p>The <code>tune::tune_grid()</code> function will help us train these 10 penalized logistic regression models and save the validation set prediction (via the call to <code>control_grid()</code>) so that diagnostic information will be available after fitting the model. To quantify how well the model performs (on the <em>validation set</em>), let’s first consider the <a href="https://en.wikipedia.org/wiki/Receiver_operating_characteristic">area under the ROC curve</a> across a range of hyperparameters.</p>
 <div class="cell">
 <div class="sourceCode cell-code" id="cb35"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb35-1"><a href="#cb35-1" aria-hidden="true" tabindex="-1"></a>lr_res <span class="ot">&lt;-</span> </span>
 <span id="cb35-2"><a href="#cb35-2" aria-hidden="true" tabindex="-1"></a>  lr_workflow <span class="sc">%&gt;%</span> </span>
@@ -667,18 +667,18 @@ dbl (2324): s_no, genome_id, prmA, hisC_1, araB, yqeN, tagH_2, tet(38), lrgB...
 <section id="retrieving-your-top-features" class="level4">
 <h4 class="anchored" data-anchor-id="retrieving-your-top-features">Retrieving your top features</h4>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb52"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb52-1"><a href="#cb52-1" aria-hidden="true" tabindex="-1"></a><span class="co">#Select best LR model</span></span>
+<div class="sourceCode cell-code" id="cb52"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb52-1"><a href="#cb52-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Select best LR model</span></span>
 <span id="cb52-2"><a href="#cb52-2" aria-hidden="true" tabindex="-1"></a>best_lr_model_pr <span class="ot">&lt;-</span> <span class="fu">select_best</span>(lr_res_pr, <span class="st">"pr_auc"</span>)</span>
 <span id="cb52-3"><a href="#cb52-3" aria-hidden="true" tabindex="-1"></a>final_lr_model_pr <span class="ot">&lt;-</span> <span class="fu">finalize_workflow</span>(lr_workflow, best_lr_model_pr)</span>
 <span id="cb52-4"><a href="#cb52-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb52-5"><a href="#cb52-5" aria-hidden="true" tabindex="-1"></a><span class="co">#Fit the data</span></span>
+<span id="cb52-5"><a href="#cb52-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Fit the data</span></span>
 <span id="cb52-6"><a href="#cb52-6" aria-hidden="true" tabindex="-1"></a>lr_fit_pr <span class="ot">&lt;-</span> final_lr_model_pr <span class="sc">%&gt;%</span></span>
 <span id="cb52-7"><a href="#cb52-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">fit</span>(<span class="at">data =</span> gpa_other)</span>
 <span id="cb52-8"><a href="#cb52-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb52-9"><a href="#cb52-9" aria-hidden="true" tabindex="-1"></a><span class="co">#Save predictions</span></span>
+<span id="cb52-9"><a href="#cb52-9" aria-hidden="true" tabindex="-1"></a><span class="co"># Save predictions</span></span>
 <span id="cb52-10"><a href="#cb52-10" aria-hidden="true" tabindex="-1"></a>lr_aug_pr <span class="ot">&lt;-</span> <span class="fu">augment</span>(lr_fit_pr, gpa_test)</span>
 <span id="cb52-11"><a href="#cb52-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb52-12"><a href="#cb52-12" aria-hidden="true" tabindex="-1"></a><span class="co">#Get auroc</span></span>
+<span id="cb52-12"><a href="#cb52-12" aria-hidden="true" tabindex="-1"></a><span class="co"># Get AUPRC</span></span>
 <span id="cb52-13"><a href="#cb52-13" aria-hidden="true" tabindex="-1"></a>auprc <span class="ot">&lt;-</span> lr_aug_pr <span class="sc">%&gt;%</span></span>
 <span id="cb52-14"><a href="#cb52-14" aria-hidden="true" tabindex="-1"></a>  <span class="fu">pr_auc</span>(<span class="at">truth =</span> amr_pheno, .pred_Resistant) <span class="sc">%&gt;%</span></span>
 <span id="cb52-15"><a href="#cb52-15" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(.estimate) <span class="sc">%&gt;%</span> <span class="fu">as.numeric</span>()</span>
