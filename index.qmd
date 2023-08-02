@@ -82,7 +82,7 @@ gpa_featmat %>%
   mutate(prop = n/sum(n))
 ```
 
-Before we proceed, let's also try and get a sense of the values in this feature matrix. Since there are thousands of genes, we'll randomly pick a few of them and visualize the distribution of their values across all the samples using boxplots.
+Before we proceed, let's also try and get a sense of the values in this feature matrix. Since there are thousands of genes, we'll randomly pick a few of them and visualize the distribution of their values across all the samples using a histogram.
 
 ```{r eval=TRUE, echo=TRUE, message=FALSE, warning=FALSE}
 #| echo: true
@@ -108,7 +108,7 @@ ggplot(gpa_sum_long, aes(value)) +
 
 ## Feature matrices --\> ML
 
-Given there are genomes with R/S from multiple drugs, to make the problem simpler, let's pick one drug of interest and define the problem as classifying whether a genome is resistant or not to this antibiotic.
+To keep the problem simple, we pick one drug of interest (penicillin) and define the problem as classifying whether a genome is resistant or susceptible to this antibiotic.
 
 ```{r echo=TRUE, eval=TRUE, message=FALSE, warning=FALSE}
 #| echo: true
@@ -149,7 +149,7 @@ We can see that, in our dataset, only xx% of the samples are "Resistant". Referr
 
 If we take the data from all samples and train an *AMR classification* ML model, we cannot easily tell how good the model is. So, let's reserve 25% of the samples to a *test set*, which we will hold out until the end of the project, at which point there should only be one or two models under serious consideration. The *test set* will be used as an unbiased source for measuring final model performance.
 
-This is also the first step where we need to pay attention to class imbalance. As the `amr_pheno` variable is highly imbalanced, we need to use *stratified* random samples so that both the splits contain nearly identical proportions of positive and negative samples.
+This is also the first step where we need to pay attention to class balance. We use *stratified* random samples so that both the splits contain nearly identical proportions of positive and negative samples.
 
 ```{r echo=TRUE, eval=TRUE, message=FALSE, warning=FALSE}
 #| echo: true
@@ -561,7 +561,7 @@ print(top_genes_pr)
     rf_grid <- tibble(mtry = c(0.002, 0.02, 0.2), min_n = c(2, 6, 12))
 
     # Tune the model using cross-validation;
-    # try 30 different hyperparameter sets; use auprc as evaluation metric.
+    # try 9 different hyperparameter sets; use auprc as evaluation metric.
     rf_res <- tune_grid(rf_workflow,
                         resamples = vfold_cv(gpa_train),
                         grid = rf_grid,
@@ -576,7 +576,7 @@ print(top_genes_pr)
       collect_predictions(parameters = rf_best) %>% 
       roc_curve(amr_pheno, .pred_Resistant) %>% 
       mutate(model = "Logistic Regression")
-    autoplot(lr_roc)
+    autoplot(rf_roc)
     
     # Select best RF model
     best_rf_model <- select_best(rf_res, "roc_auc")
@@ -588,7 +588,7 @@ print(top_genes_pr)
     # Save predictions
     rf_aug <- augment(rf_fit, gpa_test)
 
-    # Get auprc
+    # Get auroc
     auroc <- rf_aug %>%
       roc_auc(truth = amr_pheno, .pred_Resistant) %>%
       select(.estimate) %>%
@@ -601,7 +601,7 @@ print(top_genes_pr)
       extract_fit_parsnip() %>%
       vip::vi() %>% slice(1:n_top_genes) %>%
       select(1) %>% pull()
-    print(top_genes)
+    print(top_genes_rf)
 ```
 
 ## Too many features?
