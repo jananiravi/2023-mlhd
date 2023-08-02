@@ -6,13 +6,13 @@ output:
   html:
     toc: true
     toc_float: true
-    number_sections: true
+    numbered_sections: true
     code_fold: show
 ---
 
-# MLHD @ICTS \| Aug 02, 2023
+# ML for AMR
 
-> This is a companion repo & webpage for the Microbial Genomics and ML workshop, first presented at the MLHD 2023 conference! You can access the material here: <https://jananiravi.github.io/2023-mlhd>
+> This is a companion repo & webpage for the 'ML for Microbial Genomics' workshop, first presented at the MLHD 2023 conference \\\@ICTS! You can access the material here: <https://jananiravi.github.io/2023-mlhd>
 
 ## Overview
 
@@ -21,7 +21,7 @@ output:
 ### Acknowledgments
 
 -   JRaviLab: Jacob Krol, Ethan Wolfe, Evan Brenner, Keenan Manpearl, Joseph Burke, Vignesh Sridhar, Jill Bilodeaux (contributed to the antimicrobial resistance project)
--   Arjun Krishnan (contributed to the tidymodels qmd primer)
+-   Arjun Krishnan (for the tidymodels `qmd` primer)
 -   R-Ladies, esp. R-Ladies East Lansing, R-Ladies Aurora; R/Bioconductor; rOpenSci (for all things R!)
 -   `tidymodels` resource by Julia Silge et al., \| <https://tidymodels.org>
 
@@ -36,7 +36,7 @@ To use the code in this document, you will need to install the following package
 library(tidyverse)
 library(tidymodels)
 library(glmnet) # for LR
-library(vip) # to extract important features
+library(vip)    # to extract important features
 library(ranger) # for RF
 ```
 
