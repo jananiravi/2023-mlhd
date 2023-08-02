@@ -6,8 +6,11 @@ output:
   html:
     toc: true
     toc_float: true
-    numbered_sections: true
-    code_fold: show
+    toc-title: Contents
+    number-sections: true
+    toc-location: left
+    code-fold: true
+    code-overflow: wrap
 ---
 
 # ML for AMR
@@ -612,19 +615,19 @@ Try dimensionality reduction with SVD --\> retrieve top PCs --\> find contributi
 
 -   [x] Reproducible docs & code with `qmd`/`rmd`
 
--   [x] basic data cleanup to get it ready for ML models
+-   [x] Basic data cleanup to get it ready for ML models
 
--   [x] tidymodels
+-   [x] `tidymodels`
 
--   [x] building recipes and workflows
+-   [x] Building recipes and workflows
 
--   [x] calculating AUROC and AUPRC
+-   [x] Calculating AUROC and AUPRC
 
--   [x] train-validate-test splits to optimize for best hyperparameters
+-   [x] Train-validate-test splits to optimize for best hyperparameters
 
--   [x] picking the best models based on low penalty and high AUROC/AUPRC
+-   [x] Picking the best models based on low penalty and high AUROC/AUPRC
 
--   [x] plotting AUROC/AUPRC
+-   [x] Plotting AUROC/AUPRC
 
 -   [x] Logistic regression with L1 lasso regression (and L2)
 
