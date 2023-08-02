@@ -140,7 +140,7 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <section id="ml-for-amr" class="level1">
 <h1>ML for AMR</h1>
 <blockquote class="blockquote">
-<p>This is a companion repo &amp; webpage for the ‘ML for Microbial Genomics’ workshop, first presented at the MLHD 2023 conference \@ICTS! You can access the material here: <a href="https://jananiravi.github.io/2023-mlhd" class="uri">https://jananiravi.github.io/2023-mlhd</a></p>
+<p>This is a companion repo &amp; webpage for the ‘ML for Microbial Genomics’ workshop, first presented at the MLHD 2023 conference \@ICTS! You can access the material here: <a href="https://jananiravi.github.io/2023-mlhd" class="uri">https://jananiravi.github.io/2023-mlhd</a> and <a href="https://bit.ly/mlhd2023-jr1">slides here</a>.</p>
 </blockquote>
 <section id="overview" class="level2">
 <h2 class="anchored" data-anchor-id="overview">Overview</h2>
@@ -150,8 +150,8 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <section id="acknowledgments" class="level3">
 <h3 class="anchored" data-anchor-id="acknowledgments">Acknowledgments</h3>
 <ul>
-<li>JRaviLab: Jacob Krol, Ethan Wolfe, Evan Brenner, Keenan Manpearl, Joseph Burke, Vignesh Sridhar, Jill Bilodeaux (contributed to the antimicrobial resistance project)</li>
-<li>Arjun Krishnan (contributed to the tidymodels <code>qmd</code> primer)</li>
+<li><a href="//jravilab.github.io">JRaviLab</a>: Jacob Krol, Ethan Wolfe, Evan Brenner, Keenan Manpearl, Joseph Burke, Vignesh Sridhar, Jill Bilodeaux (contributed to the antimicrobial resistance project)</li>
+<li><a href="//thekrishnanlab.org">Arjun Krishnan</a> (for the tidymodels <code>qmd</code> primer)</li>
 <li>R-Ladies, esp.&nbsp;R-Ladies East Lansing, R-Ladies Aurora; R/Bioconductor; rOpenSci (for all things R!)</li>
 <li><code>tidymodels</code> resource by Julia Silge et al., | <a href="https://tidymodels.org" class="uri">https://tidymodels.org</a></li>
 </ul>
@@ -190,7 +190,7 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 ✖ dplyr::lag()      masks stats::lag()
 ✖ yardstick::spec() masks readr::spec()
 ✖ recipes::step()   masks stats::step()
-• Learn how to get started at https://www.tidymodels.org/start/</code></pre>
+• Use tidymodels_prefer() to resolve common conflicts.</code></pre>
 </div>
 <div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(glmnet) <span class="co"># for LR</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stderr">
@@ -204,7 +204,7 @@ The following objects are masked from 'package:tidyr':
 
 Loaded glmnet 4.1-7</code></pre>
 </div>
-<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(vip) <span class="co"># to extract important features</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(vip)    <span class="co"># to extract important features</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stderr">
 <pre><code>
 Attaching package: 'vip'
@@ -285,7 +285,7 @@ dbl (2324): s_no, genome_id, prmA, hisC_1, araB, yqeN, tagH_2, tet(38), lrgB...
 2 Susceptible   439 0.477</code></pre>
 </div>
 </div>
-<p>Before we proceed, let’s also try and get a sense of the values in this feature matrix. Since there are thousands of genes, we’ll randomly pick a few of them and visualize the distribution of their values across all the samples using boxplots.</p>
+<p>Before we proceed, let’s also try and get a sense of the values in this feature matrix. Since there are thousands of genes, we’ll randomly pick a few of them and visualize the distribution of their values across all the samples using a histogram.</p>
 <div class="cell">
 <div class="sourceCode cell-code" id="cb18"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>gpa_sum <span class="ot">&lt;-</span> gpa_featmat <span class="sc">|&gt;</span></span>
 <span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(<span class="dv">7</span><span class="sc">:</span><span class="fu">last_col</span>()) <span class="sc">|&gt;</span></span>
@@ -310,7 +310,7 @@ dbl (2324): s_no, genome_id, prmA, hisC_1, araB, yqeN, tagH_2, tet(38), lrgB...
 </section>
 <section id="feature-matrices-ml" class="level2">
 <h2 class="anchored" data-anchor-id="feature-matrices-ml">Feature matrices –&gt; ML</h2>
-<p>Given there are genomes with R/S from multiple drugs, to make the problem simpler, let’s pick one drug of interest and define the problem as classifying whether a genome is resistant or not to this antibiotic.</p>
+<p>To keep the problem simple, we pick one drug of interest (penicillin) and define the problem as classifying whether a genome is resistant or susceptible to this antibiotic.</p>
 <div class="cell">
 <div class="sourceCode cell-code" id="cb19"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>pos_pheno <span class="ot">&lt;-</span> <span class="st">"Resistant"</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
@@ -342,7 +342,7 @@ dbl (2324): s_no, genome_id, prmA, hisC_1, araB, yqeN, tagH_2, tet(38), lrgB...
 <section id="data-splitting" class="level3">
 <h3 class="anchored" data-anchor-id="data-splitting">Data splitting</h3>
 <p>If we take the data from all samples and train an <em>AMR classification</em> ML model, we cannot easily tell how good the model is. So, let’s reserve 25% of the samples to a <em>test set</em>, which we will hold out until the end of the project, at which point there should only be one or two models under serious consideration. The <em>test set</em> will be used as an unbiased source for measuring final model performance.</p>
-<p>This is also the first step where we need to pay attention to class imbalance. As the <code>amr_pheno</code> variable is highly imbalanced, we need to use <em>stratified</em> random samples so that both the splits contain nearly identical proportions of positive and negative samples.</p>
+<p>This is also the first step where we need to pay attention to class balance. We use <em>stratified</em> random samples so that both the splits contain nearly identical proportions of positive and negative samples.</p>
 <div class="cell">
 <div class="sourceCode cell-code" id="cb23"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a><span class="co"># The function `initial_split()` takes the original data and saves the information on how to make the partitions.</span></span>
 <span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">123</span>)</span>
@@ -612,7 +612,7 @@ dbl (2324): s_no, genome_id, prmA, hisC_1, araB, yqeN, tagH_2, tet(38), lrgB...
 </section>
 <section id="when-you-have-imbalanced-classes" class="level3">
 <h3 class="anchored" data-anchor-id="when-you-have-imbalanced-classes">When you have imbalanced classes</h3>
-<p>However, this measure is not sensitive to class imbalances and can come out to be high even if the model is making many mistakes in the minor positive class — which is typically of biomedical interest — and getting most of the major negative class correct.</p>
+<p>However, the AUROC measure is not sensitive to class imbalances and can come out to be high even if the model is making many mistakes in the minor positive class — which is typically of biomedical interest — and getting most of the major negative class correct.</p>
 <p>So, the final analysis we’re going to do is to evaluate performance based on another metric called <a href="https://en.wikipedia.org/wiki/Precision_and_recall">area under the Precision-Recall curve</a> that is more sensitive to the minor positive class by focusing on the fraction of top positive predictions that are correct (precision) and the fraction of positive samples that are correctly predicted (recall).</p>
 <div class="cell">
 <div class="sourceCode cell-code" id="cb47"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb47-1"><a href="#cb47-1" aria-hidden="true" tabindex="-1"></a>lr_res_pr <span class="ot">&lt;-</span> lr_workflow <span class="sc">%&gt;%</span> </span>
@@ -755,7 +755,7 @@ dbl (2324): s_no, genome_id, prmA, hisC_1, araB, yqeN, tagH_2, tet(38), lrgB...
 <span id="cb58-23"><a href="#cb58-23" aria-hidden="true" tabindex="-1"></a>    rf_grid <span class="ot">&lt;-</span> <span class="fu">tibble</span>(<span class="at">mtry =</span> <span class="fu">c</span>(<span class="fl">0.002</span>, <span class="fl">0.02</span>, <span class="fl">0.2</span>), <span class="at">min_n =</span> <span class="fu">c</span>(<span class="dv">2</span>, <span class="dv">6</span>, <span class="dv">12</span>))</span>
 <span id="cb58-24"><a href="#cb58-24" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb58-25"><a href="#cb58-25" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Tune the model using cross-validation;</span></span>
-<span id="cb58-26"><a href="#cb58-26" aria-hidden="true" tabindex="-1"></a>    <span class="co"># try 30 different hyperparameter sets; use auprc as evaluation metric.</span></span>
+<span id="cb58-26"><a href="#cb58-26" aria-hidden="true" tabindex="-1"></a>    <span class="co"># try 9 different hyperparameter sets; use auprc as evaluation metric.</span></span>
 <span id="cb58-27"><a href="#cb58-27" aria-hidden="true" tabindex="-1"></a>    rf_res <span class="ot">&lt;-</span> <span class="fu">tune_grid</span>(rf_workflow,</span>
 <span id="cb58-28"><a href="#cb58-28" aria-hidden="true" tabindex="-1"></a>                        <span class="at">resamples =</span> <span class="fu">vfold_cv</span>(gpa_train),</span>
 <span id="cb58-29"><a href="#cb58-29" aria-hidden="true" tabindex="-1"></a>                        <span class="at">grid =</span> rf_grid,</span>
@@ -773,7 +773,7 @@ using the resamples with no tuning. Did you want to [tune()] parameters?</code><
 <span id="cb60-6"><a href="#cb60-6" aria-hidden="true" tabindex="-1"></a>      <span class="fu">collect_predictions</span>(<span class="at">parameters =</span> rf_best) <span class="sc">%&gt;%</span> </span>
 <span id="cb60-7"><a href="#cb60-7" aria-hidden="true" tabindex="-1"></a>      <span class="fu">roc_curve</span>(amr_pheno, .pred_Resistant) <span class="sc">%&gt;%</span> </span>
 <span id="cb60-8"><a href="#cb60-8" aria-hidden="true" tabindex="-1"></a>      <span class="fu">mutate</span>(<span class="at">model =</span> <span class="st">"Logistic Regression"</span>)</span>
-<span id="cb60-9"><a href="#cb60-9" aria-hidden="true" tabindex="-1"></a>    <span class="fu">autoplot</span>(lr_roc)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb60-9"><a href="#cb60-9" aria-hidden="true" tabindex="-1"></a>    <span class="fu">autoplot</span>(rf_roc)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output-display">
 <p><img src="index_files/figure-html/unnamed-chunk-29-1.png" class="img-fluid" width="672"></p>
 </div>
@@ -787,7 +787,7 @@ using the resamples with no tuning. Did you want to [tune()] parameters?</code><
 <span id="cb61-8"><a href="#cb61-8" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Save predictions</span></span>
 <span id="cb61-9"><a href="#cb61-9" aria-hidden="true" tabindex="-1"></a>    rf_aug <span class="ot">&lt;-</span> <span class="fu">augment</span>(rf_fit, gpa_test)</span>
 <span id="cb61-10"><a href="#cb61-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb61-11"><a href="#cb61-11" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Get auprc</span></span>
+<span id="cb61-11"><a href="#cb61-11" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Get auroc</span></span>
 <span id="cb61-12"><a href="#cb61-12" aria-hidden="true" tabindex="-1"></a>    auroc <span class="ot">&lt;-</span> rf_aug <span class="sc">%&gt;%</span></span>
 <span id="cb61-13"><a href="#cb61-13" aria-hidden="true" tabindex="-1"></a>      <span class="fu">roc_auc</span>(<span class="at">truth =</span> amr_pheno, .pred_Resistant) <span class="sc">%&gt;%</span></span>
 <span id="cb61-14"><a href="#cb61-14" aria-hidden="true" tabindex="-1"></a>      <span class="fu">select</span>(.estimate) <span class="sc">%&gt;%</span></span>
@@ -802,10 +802,10 @@ using the resamples with no tuning. Did you want to [tune()] parameters?</code><
 <span id="cb63-4"><a href="#cb63-4" aria-hidden="true" tabindex="-1"></a>      <span class="fu">extract_fit_parsnip</span>() <span class="sc">%&gt;%</span></span>
 <span id="cb63-5"><a href="#cb63-5" aria-hidden="true" tabindex="-1"></a>      vip<span class="sc">::</span><span class="fu">vi</span>() <span class="sc">%&gt;%</span> <span class="fu">slice</span>(<span class="dv">1</span><span class="sc">:</span>n_top_genes) <span class="sc">%&gt;%</span></span>
 <span id="cb63-6"><a href="#cb63-6" aria-hidden="true" tabindex="-1"></a>      <span class="fu">select</span>(<span class="dv">1</span>) <span class="sc">%&gt;%</span> <span class="fu">pull</span>()</span>
-<span id="cb63-7"><a href="#cb63-7" aria-hidden="true" tabindex="-1"></a>    <span class="fu">print</span>(top_genes)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb63-7"><a href="#cb63-7" aria-hidden="true" tabindex="-1"></a>    <span class="fu">print</span>(top_genes_rf)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
-<pre><code> [1] "group_7632"  "group_7634"  "blaZ"        "blaR1"       "ugpQ"       
- [6] "blaR1-2"     "bin3"        "group_11618" "cadC"        "group_5831" </code></pre>
+<pre><code> [1] "blaZ"        "blaR1"       "hin"         "blaI"        "blaR1-2"    
+ [6] "cadC"        "group_2301"  "group_7632"  "group_7634"  "group_12234"</code></pre>
 </div>
 </div>
 </section>

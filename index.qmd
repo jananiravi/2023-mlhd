@@ -12,7 +12,7 @@ output:
 
 # ML for AMR
 
-> This is a companion repo & webpage for the 'ML for Microbial Genomics' workshop, first presented at the MLHD 2023 conference \\\@ICTS! You can access the material here: <https://jananiravi.github.io/2023-mlhd>
+> This is a companion repo & webpage for the 'ML for Microbial Genomics' workshop, first presented at the MLHD 2023 conference \\\@ICTS! You can access the material here: <https://jananiravi.github.io/2023-mlhd> and [slides here](https://bit.ly/mlhd2023-jr1).
 
 ## Overview
 
@@ -20,8 +20,8 @@ output:
 
 ### Acknowledgments
 
--   JRaviLab: Jacob Krol, Ethan Wolfe, Evan Brenner, Keenan Manpearl, Joseph Burke, Vignesh Sridhar, Jill Bilodeaux (contributed to the antimicrobial resistance project)
--   Arjun Krishnan (for the tidymodels `qmd` primer)
+-   [JRaviLab](//jravilab.github.io): Jacob Krol, Ethan Wolfe, Evan Brenner, Keenan Manpearl, Joseph Burke, Vignesh Sridhar, Jill Bilodeaux (contributed to the antimicrobial resistance project)
+-   [Arjun Krishnan](//thekrishnanlab.org) (for the tidymodels `qmd` primer)
 -   R-Ladies, esp. R-Ladies East Lansing, R-Ladies Aurora; R/Bioconductor; rOpenSci (for all things R!)
 -   `tidymodels` resource by Julia Silge et al., \| <https://tidymodels.org>
 
@@ -421,7 +421,7 @@ print(top_genes)
 
 ### When you have imbalanced classes
 
-However, this measure is not sensitive to class imbalances and can come out to be high even if the model is making many mistakes in the minor positive class --- which is typically of biomedical interest --- and getting most of the major negative class correct.
+However, the AUROC measure is not sensitive to class imbalances and can come out to be high even if the model is making many mistakes in the minor positive class --- which is typically of biomedical interest --- and getting most of the major negative class correct.
 
 So, the final analysis we're going to do is to evaluate performance based on another metric called [area under the Precision-Recall curve](https://en.wikipedia.org/wiki/Precision_and_recall) that is more sensitive to the minor positive class by focusing on the fraction of top positive predictions that are correct (precision) and the fraction of positive samples that are correctly predicted (recall).
 
